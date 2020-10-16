@@ -1,0 +1,144 @@
+---
+title: "Predicting Housing Prices with ARIMA models and the Case-Shiller"
+author: "Tyler Harris"
+date: "10/15/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# This project is a slight modification of my final project for IT528 Quantitative Risk Analysis while I was at Purdue.
+# Original Date of Completion: March 8, 2020
+# The research paper I wrote to support this is available upon request
+# Created by Tyler Harris
+# Data Retrieved from FRED (Federal Reserve Bank of St. Louis)
+```
+
+```{r}
+# If these libraries are not installed on your machine, you can use the install.packages("name_of_package") command and library(name_of_package) to do the same thing as the require() function I am using below. I just like require because it is a single line of code :)
+
+# Import Libraries
+require(forecast)
+require(tseries)
+require(tidyverse)
+```
+
+```{r}
+# Import Data
+CaseShiller <- read.csv("SPCS20RPSNSA.csv")
+
+# Check data import
+head(CaseShiller)
+```
+
+```{r}
+# Change name of data column to Units
+names(CaseShiller)[2] <- "Units"
+
+# Creates a Units Object as intermediate to transform into time series
+CSUnits <- CaseShiller$Units
+
+# Creates Time Series Object that starts in January 2000 with a monthly frequency
+tCaseShiller <- ts(CSUnits, start = c(2000, 1), frequency = 12)
+
+# Check Data Transformation
+tCaseShiller
+```
+
+
+
+```{r}
+# Automatically create ARIMA model
+fit <- auto.arima(tCaseShiller)
+fit
+```
+
+```{r}
+# Check Accuracy
+accuracy(fit)
+```
+
+```{r}
+# Create a Simple Plot with a forecast for the next year
+plot(forecast(fit, 12), xlab = "Date", ylab = "Units", main = "ARIMA Forecast for Case-Shiller Index")
+```
+
+```{r}
+# Get table of forecasted values. Check back next year to see whether this was close!
+pred_values <- forecast(fit, 12)
+pred_values
+```
+
+
+```{r}
+# Check assumptions of normality & Autocorrelation
+qqnorm(fit$residuals)
+qqline(fit$residuals)
+Box.test(fit$residuals, type = "Ljung-Box")
+
+# Has high p-value, so autocorrelations not significantly different than 0
+# There are a few possible outliers, but most of the data is pretty normally distributed
+```
+
+```{r}
+# Transform time series to log scale
+ltCaseShiller <- log(tCaseShiller)
+
+# check it worked
+head(ltCaseShiller)
+```
+
+```{r}
+# Create new fit on log scale series for seasonal decomposition
+fit2 <- stl(ltCaseShiller, s.window = "period")
+
+# Plot Seasonal Decomposition
+plot(fit2, main = "Seasonal Decomposition of log(Case-Shiller Units)")
+```
+
+```{r}
+# Create a Season Plot
+seasonplot(tCaseShiller, year.labels = "TRUE", main = " Season Plot of Case-Shiller Units by Month", xlab = "Month", ylab = "Units", col = c("red", "orange", "gray", "green", "blue", "purple", "black"))
+```
+
+```{r}
+# Create a Season Plot
+ggseasonplot(tCaseShiller, year.labels = TRUE, col = rainbow(20))
+```
+
+```{r}
+# Automatically create ARIMA model
+fit3 <- auto.arima(ltCaseShiller)
+fit3
+```
+
+```{r}
+# Check Accuracy
+fitAccuracy <- data.frame(accuracy(fit))
+fitAccuracy2 <- data.frame(accuracy(fit3))
+
+fitAccuracyFinal <- rbind(fitAccuracy, fitAccuracy2)
+fitAccuracyFinal
+```
+
+```{r}
+# Create a Simple Plot with a logged forecast for the next year
+plot(forecast(fit3, 12), xlab = "Date", ylab = "Units", main = "ARIMA Forecast for Case-Shiller Index")
+```
+
+```{r}
+# Get table of forecasted values. Check back next year to see whether this was close!
+# Original Data
+pred_values <- data.frame(forecast(fit, 12))
+
+# Log transformed data
+pred_values2 <- data.frame(forecast(fit3, 12))
+pred_values2[,1:5] <- exp(pred_values2[,1:5])
+
+# Merge forecast predictions!
+mergedDF <- data.frame(Date = rownames(pred_values), Original_Data_Forecast = pred_values$Point.Forecast, Log_Transformed_Data_Forecast = pred_values2$Point.Forecast, Difference = round(pred_values$Point.Forecast - pred_values2$Point.Forecast, 2))
+mergedDF
+```
